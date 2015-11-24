@@ -1,4 +1,4 @@
-// This is a sample implementation of a connected component labeling algorithm
+// This is an example implementation of a connected component labeling algorithm
 // Written by Naoki Shibata shibatch.sf.net@gmail.com http://ito-lab.naist.jp/~n-sibata/cclarticle/index.xhtml
 // This program is in public domain. You can use and modify this code for any purpose without any obligation.
 
