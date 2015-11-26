@@ -1,7 +1,9 @@
-// This is an example implementation of a connected component labeling algorithm
-// Written by Naoki Shibata shibatch.sf.net@gmail.com http://ito-lab.naist.jp/~n-sibata/cclarticle/index.xhtml
+// Written by Naoki Shibata shibatch.sf.net@gmail.com 
+// http://ito-lab.naist.jp/~n-sibata/cclarticle/index.xhtml
+
 // This program is in public domain. You can use and modify this code for any purpose without any obligation.
 
+// This is an example implementation of a connected component labeling algorithm proposed in the following paper.
 // Naoki Shibata, Shinya Yamamoto: GPGPU-Assisted Subpixel Tracking Method for Fiducial Markers,
 // Journal of Information Processing, Vol.22(2014), No.1, pp.19-28, 2014-01. DOI:10.2197/ipsjjip.22.19
 
@@ -25,7 +27,7 @@ void abortf(const char *mes, ...) {
   va_start(ap, mes);
   vfprintf(stderr, mes, ap);
   va_end(ap);
-  abort();
+  exit(-1);
 }
 
 cl_device_id simpleGetDevice() {
@@ -46,7 +48,7 @@ cl_device_id simpleGetDevice() {
   if (ret != CL_SUCCESS) {
     fprintf(stderr, "Could not get a device ID : %d\n", ret);
     if (ret == CL_DEVICE_NOT_FOUND) fprintf(stderr, "Device not found\n");
-    abort();
+    exit(-1);
   }
 
   clGetDeviceInfo(device, CL_DEVICE_NAME, 1024, strbuf, NULL);
@@ -72,7 +74,7 @@ cl_context simpleCreateContext(cl_device_id device) {
   return hContext;
 }
 
-char *readFileAsStr(char *fn) {
+char *readFileAsStr(const char *fn) {
   FILE *fp = fopen(fn, "r");
   if (fp == NULL) abortf("Couldn't open file %s\n", fn);
 
@@ -84,7 +86,7 @@ char *readFileAsStr(char *fn) {
 
   if (size > 1000000) abortf("readFileAsStr : file too large\n");
 
-  char *buf = malloc(size+10);
+  char *buf = (char *)malloc(size+10);
 
   fread(buf, 1, size, fp);
   buf[size] = '\0';
@@ -99,7 +101,7 @@ char *readFileAsStr(char *fn) {
 int main(int argc, char **argv) {
   int i;
 
-  if (argc < 2) abortf("Usage : %s <image file name>", argv[0]);
+  if (argc < 2) abortf("Usage : %s <image file name>\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
 
   //
 
@@ -114,7 +116,9 @@ int main(int argc, char **argv) {
 
   //
 
-  cl_int *bufPix = calloc(iw * ih, sizeof(cl_int)), *bufLabel = calloc(iw * ih, sizeof(cl_int)), *bufFlags = calloc(MAXPASS+1, sizeof(cl_int));
+  cl_int *bufPix   = (cl_int *)calloc(iw * ih,   sizeof(cl_int));
+  cl_int *bufLabel = (cl_int *)calloc(iw * ih,   sizeof(cl_int));
+  cl_int *bufFlags = (cl_int *)calloc(MAXPASS+1, sizeof(cl_int));
 
   {
     int x, y;
@@ -143,7 +147,7 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Build log follows\n");
       fprintf(stderr, "%s\n", strbuf);
     }
-    abort();
+    exit(-1);
   }
 
   cl_kernel kernel_prepare = clCreateKernel(program, "labelxPreprocess_int_int", NULL);
@@ -154,7 +158,7 @@ int main(int argc, char **argv) {
   cl_mem memLabel = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, iw * ih * sizeof(cl_int), bufLabel, NULL);
   cl_mem memFlags = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (MAXPASS+1) * sizeof(cl_int), bufFlags, NULL);
 
-  size_t work_size[2] = {iw, ih};
+  size_t work_size[2] = {(size_t)iw, (size_t)ih};
 
   //
 
@@ -198,7 +202,7 @@ int main(int argc, char **argv) {
     int x, y;
     for(y=0;y<ih;y++) {
       for(x=0;x<iw;x++) {
-	int rgb = bufLabel[y * iw + x] == 0 ? 0 : (bufLabel[y * iw + x]  * 1103515245 + 12345);
+	int rgb = bufLabel[y * iw + x] == -1 ? 0 : (bufLabel[y * iw + x]  * 1103515245 + 12345);
 	data[y * img->widthStep + x * 3 + 0] = rgb & 0xff; rgb >>= 8;
 	data[y * img->widthStep + x * 3 + 1] = rgb & 0xff; rgb >>= 8;
 	data[y * img->widthStep + x * 3 + 2] = rgb & 0xff; rgb >>= 8;
