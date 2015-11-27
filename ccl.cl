@@ -17,7 +17,14 @@ __kernel void labelxPreprocess_int_int(global int *label, global int *pix, globa
 
   if (x >= iw || y >= ih) return;
 
+#if 0
   label[p0] = pix[p0] == bgc ? -1 : p0;
+#else
+  if (pix[p0] == bgc) { label[p0] = -1; return; }
+  if (y > 0 && pix[p0] == pix[p0-iw]) { label[p0] = p0-iw; return; }
+  if (x > 0 && pix[p0] == pix[p0- 1]) { label[p0] = p0- 1; return; }
+  label[p0] = p0;
+#endif
 }
 
 __kernel void label8xMain_int_int(global int *label, global int *pix, global int *flags, int pass, int iw, int ih) {
