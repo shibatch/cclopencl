@@ -184,6 +184,7 @@ int main(int argc, char **argv) {
   }
 
   clEnqueueReadBuffer(queue, memLabel, CL_TRUE, 0, iw * ih * sizeof(cl_int), bufLabel, 0, NULL, NULL);
+  clEnqueueReadBuffer(queue, memFlags, CL_TRUE, 0, (MAXPASS+1) * sizeof(cl_int), bufFlags, 0, NULL, NULL);
 
   clFinish(queue);
 
@@ -211,6 +212,12 @@ int main(int argc, char **argv) {
   }
 
   cvSaveImage("output.png", img, NULL);
+
+  for(i=0;i<MAXPASS+1;i++) {
+    if (bufFlags[i] == 0) break;
+  }
+
+  printf("PASS = %d\n", i+1);
 
   free(bufFlags);
   free(bufLabel);
