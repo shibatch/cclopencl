@@ -143,9 +143,11 @@ int main(int argc, char **argv) {
   if (ret != CL_SUCCESS) {
     fprintf(stderr, "Could not build program : %d\n", ret);
     if (ret == CL_BUILD_PROGRAM_FAILURE) fprintf(stderr, "CL_BUILD_PROGRAM_FAILURE\n");
-    if (clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 1024, strbuf, NULL) == CL_SUCCESS) {
+
+    char logbuf[10010];
+    if (clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 10000, logbuf, NULL) == CL_SUCCESS) {
       fprintf(stderr, "Build log follows\n");
-      fprintf(stderr, "%s\n", strbuf);
+      fprintf(stderr, "%s\n", logbuf);
     }
     exit(-1);
   }
@@ -158,7 +160,7 @@ int main(int argc, char **argv) {
   cl_mem memLabel = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, iw * ih * sizeof(cl_int), bufLabel, NULL);
   cl_mem memFlags = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (MAXPASS+1) * sizeof(cl_int), bufFlags, NULL);
 
-  size_t work_size[2] = {(size_t)iw, (size_t)ih};
+  size_t work_size[2] = {(size_t)((iw + 31) & ~31), (size_t)((ih + 31) & ~31)};
 
   //
 
