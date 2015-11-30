@@ -30,32 +30,33 @@ void abortf(const char *mes, ...) {
   exit(-1);
 }
 
-cl_device_id simpleGetDevice(int did) {
-  cl_uint NumPlatforms;
-  clGetPlatformIDs (0, NULL, &NumPlatforms);
-
-  if (NumPlatforms == 0) abortf("No platform available");
-
-  cl_platform_id platformID;
-
-  clGetPlatformIDs(1, &platformID, NULL); // select first platform
-
+#define MAXPLATFORMS 10
 #define MAXDEVICES 10
 
+cl_device_id simpleGetDevice(int did) {
   cl_int ret;
-  cl_uint ndevices;
+  cl_uint nPlatforms, nTotalDevices=0;
+  cl_platform_id platformIDs[MAXPLATFORMS];
   cl_device_id devices[MAXDEVICES];
 
-  ret = clGetDeviceIDs(platformID, CL_DEVICE_TYPE_ALL, MAXDEVICES, devices, &ndevices);
+  clGetPlatformIDs(MAXPLATFORMS, platformIDs, &nPlatforms); // select first platform
+  if (nPlatforms == 0) abortf("No platform available");
 
-  if (ret != CL_SUCCESS) {
-    fprintf(stderr, "Could not get a device ID : %d\n", ret);
-    if (ret == CL_DEVICE_NOT_FOUND) fprintf(stderr, "Device not found\n");
-    exit(-1);
+  int p;
+  for(p=0;p<nPlatforms;p++) {
+    cl_uint nDevices;
+    ret = clGetDeviceIDs(platformIDs[p], CL_DEVICE_TYPE_ALL, MAXDEVICES-nTotalDevices, &devices[nTotalDevices], &nDevices);
+    if (ret != CL_SUCCESS) continue;
+    nTotalDevices += nDevices;
   }
 
-  if (did >= ndevices) {
-    fprintf(stderr, "Device %d does not exist\n", did);
+  if (did < 0 || did >= nTotalDevices) {
+    if (did >= 0) fprintf(stderr, "Device %d does not exist\n", did);
+    int i;
+    for(i=0;i<nTotalDevices;i++) {
+      clGetDeviceInfo(devices[i], CL_DEVICE_NAME, 1024, strbuf, NULL);
+      fprintf(stderr, "Device %d : %s\n", i, strbuf);
+    }
     exit(-1);
   }
 
@@ -109,7 +110,12 @@ char *readFileAsStr(const char *fn) {
 int main(int argc, char **argv) {
   int i;
 
-  if (argc < 2) abortf("Usage : %s <image file name> [<device number>]\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
+  if (argc < 2) {
+    fprintf(stderr, "Usage : %s <image file name> [<device number>]\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
+    fprintf(stderr, "\nAvailable OpenCL Devices :\n");
+    simpleGetDevice(-1);
+    exit(-1);
+  }
 
   //
 
