@@ -20,7 +20,7 @@
 #include <cv.h>
 #include <highgui.h>
 
-char strbuf[1030] = "\0";
+char strbuf[10010] = "\0";
 
 void abortf(const char *mes, ...) {
   va_list ap;
@@ -30,7 +30,7 @@ void abortf(const char *mes, ...) {
   exit(-1);
 }
 
-cl_device_id simpleGetDevice() {
+cl_device_id simpleGetDevice(int did) {
   cl_uint NumPlatforms;
   clGetPlatformIDs (0, NULL, &NumPlatforms);
 
@@ -40,10 +40,13 @@ cl_device_id simpleGetDevice() {
 
   clGetPlatformIDs(1, &platformID, NULL); // select first platform
 
-  cl_int ret;
-  cl_device_id device;
+#define MAXDEVICES 10
 
-  ret = clGetDeviceIDs(platformID, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
+  cl_int ret;
+  cl_uint ndevices;
+  cl_device_id devices[MAXDEVICES];
+
+  ret = clGetDeviceIDs(platformID, CL_DEVICE_TYPE_ALL, MAXDEVICES, devices, &ndevices);
 
   if (ret != CL_SUCCESS) {
     fprintf(stderr, "Could not get a device ID : %d\n", ret);
@@ -51,13 +54,18 @@ cl_device_id simpleGetDevice() {
     exit(-1);
   }
 
-  clGetDeviceInfo(device, CL_DEVICE_NAME, 1024, strbuf, NULL);
+  if (did >= ndevices) {
+    fprintf(stderr, "Device %d does not exist\n", did);
+    exit(-1);
+  }
+
+  clGetDeviceInfo(devices[did], CL_DEVICE_NAME, 1024, strbuf, NULL);
   printf("%s ", strbuf);
 
-  clGetDeviceInfo(device, CL_DEVICE_VERSION, 1024, strbuf, NULL);
+  clGetDeviceInfo(devices[did], CL_DEVICE_VERSION, 1024, strbuf, NULL);
   printf("%s\n", strbuf);
 
-  return device;
+  return devices[did];
 }
 
 void openclErrorCallback(const char *errinfo, const void *private_info, size_t cb, void *user_data) {
@@ -101,7 +109,7 @@ char *readFileAsStr(const char *fn) {
 int main(int argc, char **argv) {
   int i;
 
-  if (argc < 2) abortf("Usage : %s <image file name>\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
+  if (argc < 2) abortf("Usage : %s <image file name> [<device number>]\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
 
   //
 
@@ -131,10 +139,13 @@ int main(int argc, char **argv) {
 
   //
 
-  cl_device_id device = simpleGetDevice();
+  int did = 0;
+  if (argc >= 3) did = atoi(argv[2]);
+
+  cl_device_id device = simpleGetDevice(did);
   cl_context context = simpleCreateContext(device);
 
-  cl_command_queue queue = clCreateCommandQueue(context, device, 0, NULL);
+  cl_command_queue queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, NULL);
 
   char *source = readFileAsStr("ccl.cl");
   cl_program program = clCreateProgramWithSource(context, 1, (const char **)&source, 0, NULL);
@@ -143,11 +154,9 @@ int main(int argc, char **argv) {
   if (ret != CL_SUCCESS) {
     fprintf(stderr, "Could not build program : %d\n", ret);
     if (ret == CL_BUILD_PROGRAM_FAILURE) fprintf(stderr, "CL_BUILD_PROGRAM_FAILURE\n");
-
-    char logbuf[10010];
-    if (clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 10000, logbuf, NULL) == CL_SUCCESS) {
+    if (clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 10000, strbuf, NULL) == CL_SUCCESS) {
       fprintf(stderr, "Build log follows\n");
-      fprintf(stderr, "%s\n", logbuf);
+      fprintf(stderr, "%s\n", strbuf);
     }
     exit(-1);
   }
@@ -162,6 +171,11 @@ int main(int argc, char **argv) {
 
   size_t work_size[2] = {(size_t)((iw + 31) & ~31), (size_t)((ih + 31) & ~31)};
 
+  cl_event events[MAXPASS+1];
+  for(i=0;i<=MAXPASS;i++) {
+    events[i] = clCreateUserEvent(context, NULL);
+  }
+
   //
 
   clSetKernelArg(kernel_prepare, 0, sizeof(cl_mem), (void *) &memLabel);
@@ -172,7 +186,9 @@ int main(int argc, char **argv) {
   clSetKernelArg(kernel_prepare, 5, sizeof(cl_int), (int *) &iw);
   clSetKernelArg(kernel_prepare, 6, sizeof(cl_int), (int *) &ih);
 
-  clEnqueueNDRangeKernel(queue, kernel_prepare, 2, NULL, work_size, NULL, 0, NULL, NULL);
+  size_t local_work_size[2] = {32, 32};
+
+  clEnqueueNDRangeKernel(queue, kernel_prepare, 2, NULL, work_size, local_work_size, 0, NULL, &events[0]);
 
   for(i=1;i<=MAXPASS;i++) {
     clSetKernelArg(kernel_propagate, 0, sizeof(cl_mem), (void *) &memLabel);
@@ -182,13 +198,31 @@ int main(int argc, char **argv) {
     clSetKernelArg(kernel_propagate, 4, sizeof(cl_int), (int *) &iw);
     clSetKernelArg(kernel_propagate, 5, sizeof(cl_int), (int *) &ih);
 
-    clEnqueueNDRangeKernel(queue, kernel_propagate, 2, NULL, work_size, NULL, 0, NULL, NULL);
+    clEnqueueNDRangeKernel(queue, kernel_propagate, 2, NULL, work_size, NULL, 0, NULL, &events[i]);
   }
 
   clEnqueueReadBuffer(queue, memLabel, CL_TRUE, 0, iw * ih * sizeof(cl_int), bufLabel, 0, NULL, NULL);
   clEnqueueReadBuffer(queue, memFlags, CL_TRUE, 0, (MAXPASS+1) * sizeof(cl_int), bufFlags, 0, NULL, NULL);
 
   clFinish(queue);
+
+  int npass = 0;
+  for(npass=0;npass<MAXPASS+1;npass++) {
+    if (bufFlags[npass] == 0) break;
+  }
+
+  long long int total = 0;
+  for(i=0;i<=MAXPASS;i++) {
+    cl_ulong tstart, tend;
+    clGetEventProfilingInfo(events[i], CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &tstart, NULL);
+    clGetEventProfilingInfo(events[i], CL_PROFILING_COMMAND_END  , sizeof(cl_ulong), &tend  , NULL);
+    clReleaseEvent(events[i]);
+
+    printf("pass %2d : %10lld nano sec\n", i, (long long int)(tend - tstart));
+    total += tend - tstart;
+  }
+
+  printf("total   : %10lld nano sec\n", total);
 
   clReleaseMemObject(memFlags);
   clReleaseMemObject(memLabel);
@@ -206,6 +240,7 @@ int main(int argc, char **argv) {
     for(y=0;y<ih;y++) {
       for(x=0;x<iw;x++) {
 	int rgb = bufLabel[y * iw + x] == -1 ? 0 : (bufLabel[y * iw + x]  * 1103515245 + 12345);
+	//int rgb = bufLabel[y * iw + x] == -1 ? 0 : (bufLabel[y * iw + x]);
 	data[y * img->widthStep + x * 3 + 0] = rgb & 0xff; rgb >>= 8;
 	data[y * img->widthStep + x * 3 + 1] = rgb & 0xff; rgb >>= 8;
 	data[y * img->widthStep + x * 3 + 2] = rgb & 0xff; rgb >>= 8;
@@ -214,12 +249,6 @@ int main(int argc, char **argv) {
   }
 
   cvSaveImage("output.png", img, NULL);
-
-  for(i=0;i<MAXPASS+1;i++) {
-    if (bufFlags[i] == 0) break;
-  }
-
-  printf("PASS = %d\n", i+1);
 
   free(bufFlags);
   free(bufLabel);
