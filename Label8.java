@@ -49,7 +49,7 @@ public class Label8 {
 		int g = CCLSub(fb, pass, x, y, iw, ih);
 
 		if (g != -1) {
-		    for(int i=0;i<16;i++) g = fb[pass-1][g];
+		    for(int i=0;i<6;i++) g = fb[pass-1][g];
 
 		    fb[pass][h  ] = fb[pass][h  ] < g ? fb[pass][h  ] : g; // !! Atomic, referring result of current pass
 		    fb[pass][ptr] = fb[pass][ptr] < g ? fb[pass][ptr] : g; // !! Atomic
