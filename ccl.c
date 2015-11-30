@@ -192,9 +192,7 @@ int main(int argc, char **argv) {
   clSetKernelArg(kernel_prepare, 5, sizeof(cl_int), (int *) &iw);
   clSetKernelArg(kernel_prepare, 6, sizeof(cl_int), (int *) &ih);
 
-  size_t local_work_size[2] = {32, 32};
-
-  clEnqueueNDRangeKernel(queue, kernel_prepare, 2, NULL, work_size, local_work_size, 0, NULL, &events[0]);
+  clEnqueueNDRangeKernel(queue, kernel_prepare, 2, NULL, work_size, NULL, 0, NULL, &events[0]);
 
   for(i=1;i<=MAXPASS;i++) {
     clSetKernelArg(kernel_propagate, 0, sizeof(cl_mem), (void *) &memLabel);
