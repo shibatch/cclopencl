@@ -210,11 +210,6 @@ int main(int argc, char **argv) {
 
   clFinish(queue);
 
-  int npass = 0;
-  for(npass=0;npass<MAXPASS+1;npass++) {
-    if (bufFlags[npass] == 0) break;
-  }
-
   long long int total = 0;
   for(i=0;i<=MAXPASS;i++) {
     cl_ulong tstart, tend;
@@ -252,7 +247,9 @@ int main(int argc, char **argv) {
     }
   }
 
-  cvSaveImage("output.png", img, NULL);
+  int params[3] = { CV_IMWRITE_PNG_COMPRESSION, 9, 0 };
+
+  cvSaveImage("output.png", img, params);
 
   free(bufFlags);
   free(bufLabel);
