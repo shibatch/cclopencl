@@ -200,20 +200,21 @@ void ccl(int32_t *fb, int iw1, int ih, const int32_t bgc) {
 }
 
 int main(int argc, char **argv) {
-#ifdef __GNUC__
-  if (!__builtin_cpu_supports("avx2")) abortf("AVX2 not available\n");
-#endif
-
   if (argc < 2) {
     fprintf(stderr, "Usage : %s <image file name>\nThe program will threshold the image, apply CCL,\nand output the result to output.png.\n", argv[0]);
     fprintf(stderr, "You need a CPU that supports AVX2 instructions to execute this program.\n");
+    fprintf(stderr, "Because of data alignment required by AVX2 instructions,\n");
+    fprintf(stderr, "the output may by different from the OpenCL implementation.\n");
     exit(-1);
   }
+
+  if (!__builtin_cpu_supports("avx2")) abortf("AVX2 not available\n");
 
   //
 
   IplImage *img = 0;
   img = cvLoadImage(argv[1], CV_LOAD_IMAGE_COLOR);
+  int bgc = 0;
 
   if( !img ) abortf("Could not load %s\n", argv[1]);
   if (img->nChannels != 3) abortf("nChannels != 3\n");
@@ -222,7 +223,9 @@ int main(int argc, char **argv) {
   int iw1 = (iw0 + 32) & ~31, ih1 = ih0 + 4;
 
   uint8_t *data = (uint8_t *)img->imageData;
+
   int32_t *fb = memalign(64, iw1 * ih1 * sizeof(int32_t));
+  bzero(fb, iw1 * ih1 * sizeof(int32_t));
 
   for(int y=0;y<ih0;y++) {
     for(int x=0;x<iw0;x++) {
@@ -230,7 +233,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  ccl(&fb[iw1 * 3], iw1, ih0, 0);
+  ccl(&fb[iw1 * 3], iw1, ih0, bgc);
 
   for(int y=0;y<ih0;y++) {
     for(int x=0;x<iw0;x++) {
