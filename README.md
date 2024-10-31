@@ -2,7 +2,7 @@ Connected Component Labeling Algorithm for GPGPU
 
 These are OpenCL, AVX2 and Java implementation of the algorithm explained in the following web page.
 
-http://ito-lab.naist.jp/~n-sibata/cclarticle/index.xhtml
+https://shibatch.github.io/cclarticle/
 
 [1] Naoki Shibata, Shinya Yamamoto: GPGPU-Assisted Subpixel Tracking
 Method for Fiducial Markers, Journal of Information Processing,
